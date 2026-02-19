@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eBay Label → Zebra 4×6 Converter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #242836; --border: #2e3348;
+    --accent: #6c5ce7; --accent-hover: #7c6df7; --text: #e8eaf0; --text-dim: #8b8fa8;
+    --success: #00b894; --warning: #fdcb6e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+  }
+  .app { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+  header { text-align: center; margin-bottom: 40px; }
+  header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; }
+  header h1 span { color: var(--accent); }
+  header p { color: var(--text-dim); font-size: 15px; }
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 16px; padding: 60px 40px;
+    text-align: center; cursor: pointer; transition: all 0.2s ease;
+    background: var(--surface); position: relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(108,92,231,0.05); }
+  .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .drop-icon {
+    width: 64px; height: 64px; margin: 0 auto 16px; background: var(--surface2);
+    border-radius: 16px; display: flex; align-items: center; justify-content: center;
+  }
+  .drop-icon svg { width: 32px; height: 32px; stroke: var(--accent); fill: none; stroke-width: 1.5; }
+  .drop-zone h3 { font-size: 18px; margin-bottom: 6px; font-weight: 600; }
+  .drop-zone p { color: var(--text-dim); font-size: 14px; }
+  .settings { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 24px; }
+  .setting-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+  }
+  .setting-card label {
+    display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 8px;
+    font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .setting-card select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 15px; outline: none;
+  }
+  .setting-card select:focus { border-color: var(--accent); }
+  .file-item {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; margin-bottom: 10px; margin-top: 10px;
+  }
+  .file-info { display: flex; align-items: center; gap: 14px; }
+  .file-icon {
+    width: 42px; height: 42px; background: rgba(108,92,231,0.12);
+    border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .file-name { font-weight: 600; font-size: 15px; }
+  .file-pages { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
+  .status-ready {
+    background: rgba(0,184,148,0.12); color: var(--success);
+    font-size: 13px; padding: 5px 12px; border-radius: 20px; font-weight: 500;
+  }
+  .remove-btn {
+    background: none; border: none; color: var(--text-dim); cursor: pointer;
+    padding: 4px 8px; font-size: 18px; border-radius: 6px;
+  }
+  .remove-btn:hover { color: #e74c3c; background: rgba(231,76,60,0.1); }
+  .actions { display: flex; gap: 12px; margin-top: 24px; justify-content: center; }
+  .btn {
+    padding: 14px 32px; border-radius: 10px; font-size: 15px; font-weight: 600;
+    border: none; cursor: pointer; transition: all 0.15s ease;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--text-dim); }
+  .preview-section { margin-top: 32px; }
+  .preview-section h3 { font-size: 16px; margin-bottom: 16px; font-weight: 600; }
+  .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .preview-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+  }
+  .preview-box h4 {
+    font-size: 13px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 12px; font-weight: 500;
+  }
+  .preview-canvas-wrap {
+    background: white; border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; overflow: hidden; position: relative;
+  }
+  .preview-canvas-wrap canvas { max-width: 100%; max-height: 400px; display: block; }
+  .badge {
+    position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7);
+    color: white; font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 500;
+  }
+  .progress-bar {
+    width: 100%; height: 4px; background: var(--surface2); border-radius: 2px;
+    margin-top: 16px; overflow: hidden; display: none;
+  }
+  .progress-bar.active { display: block; }
+  .progress-fill {
+    height: 100%; background: var(--accent); border-radius: 2px;
+    transition: width 0.3s ease; width: 0%;
+  }
+  .info-bar {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; margin-top: 20px; font-size: 13px; color: var(--text-dim);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .info-bar svg { width: 16px; height: 16px; stroke: var(--accent); fill: none; flex-shrink: 0; }
+  @media (max-width: 700px) {
+    .settings { grid-template-columns: 1fr; }
+    .preview-grid { grid-template-columns: 1fr; }
+    .app { padding: 20px 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>eBay Label <span>→</span> Zebra 4×6</h1>
+    <p>Convert 8×10 eBay shipping labels to 4×6 thermal printer format</p>
+  </header>
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".pdf" multiple>
+    <div class="drop-icon">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    </div>
+    <h3>Drop eBay label PDFs here</h3>
+    <p>or click to browse — supports multiple files</p>
+  </div>
+  <div class="settings">
+    <div class="setting-card">
+      <label>Label Size</label>
+      <select id="labelSize">
+        <option value="4x6" selected>4 × 6 inches (standard)</option>
+        <option value="4x5">4 × 5 inches</option>
+        <option value="4x4">4 × 4 inches</option>
+      </select>
+    </div>
+    <div class="setting-card">
+      <label>Output DPI</label>
+      <select id="dpiSelect">
+        <option value="203">203 DPI (standard Zebra)</option>
+        <option value="300" selected>300 DPI (high quality)</option>
+        <option value="600">600 DPI (maximum)</option>
+      </select>
+    </div>
+    <div class="setting-card">
+      <label>Rotation</label>
+      <select id="rotationSelect">
+        <option value="auto">Auto-detect</option>
+        <option value="0">0° (no rotation)</option>
+        <option value="90">90° clockwise</option>
+        <option value="180">180°</option>
+        <option value="270" selected>270° clockwise</option>
+      </select>
+    </div>
+  </div>
+  <div id="fileList"></div>
+  <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="actions" id="actions" style="display:none;">
+    <button class="btn btn-primary" id="convertBtn" onclick="convertAll(false)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Convert &amp; Download
+    </button>
+    <button class="btn btn-secondary" id="openTabBtn" onclick="convertAll(true)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      Open in New Tab
+    </button>
+    <button class="btn btn-secondary" onclick="clearAll()">Clear All</button>
+  </div>
+  <div class="preview-section" id="previewSection" style="display:none;">
+    <h3>Preview</h3>
+    <div class="preview-grid">
+      <div class="preview-box">
+        <h4>Original (eBay)</h4>
+        <div class="preview-canvas-wrap">
+          <canvas id="previewOriginal"></canvas>
+          <span class="badge">Original</span>
+        </div>
+      </div>
+      <div class="preview-box">
+        <h4>Converted (Zebra)</h4>
+        <div class="preview-canvas-wrap">
+          <canvas id="previewConverted"></canvas>
+          <span class="badge" id="convertedBadge">4 × 6"</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info-bar">
+    <svg viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    All processing happens locally in your browser. No files are uploaded anywhere.
+  </div>
+</div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const{jsPDF}=window.jspdf;
+let files=[];
+const dropZone=document.getElementById('dropZone');
+const fileInput=document.getElementById('fileInput');
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag-over')});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag-over');handleFiles(e.dataTransfer.files)});
+fileInput.addEventListener('change',e=>handleFiles(e.target.files));
+
+function handleFiles(newFiles){
+  for(const f of newFiles){
+    if(f.type==='application/pdf'){
+      const reader=new FileReader();
+      reader.onload=async e=>{
+        const data=new Uint8Array(e.target.result);
+        const pdf=await pdfjsLib.getDocument({data}).promise;
+        files.push({name:f.name,data,pdf,pages:pdf.numPages});
+        renderFileList();
+        showPreview(files[files.length-1]);
+      };
+      reader.readAsArrayBuffer(f);
+    }
+  }
+}
+
+function renderFileList(){
+  document.getElementById('fileList').innerHTML=files.map((f,i)=>`
+    <div class="file-item">
+      <div class="file-info">
+        <div class="file-icon">📄</div>
+        <div><div class="file-name">${f.name}</div>
+        <div class="file-pages">${f.pages} page${f.pages>1?'s':''} — each page = 1 label</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="status-ready">Ready</span>
+        <button class="remove-btn" onclick="removeFile(${i})">×</button>
+      </div>
+    </div>`).join('');
+  document.getElementById('actions').style.display=files.length?'flex':'none';
+}
+
+function removeFile(i){files.splice(i,1);renderFileList();if(!files.length)document.getElementById('previewSection').style.display='none';}
+function clearAll(){files=[];renderFileList();document.getElementById('previewSection').style.display='none';fileInput.value='';}
+
+async function showPreview(file){
+  document.getElementById('previewSection').style.display='block';
+  const page=await file.pdf.getPage(1);
+  const c=document.getElementById('previewOriginal');
+  const ctx=c.getContext('2d');
+  const vp=page.getViewport({scale:1.5});
+  c.width=vp.width;c.height=vp.height;
+  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  await renderConvertedPreview(page);
+}
+
+function getRotationDegrees(contentW, contentH, targetW, targetH) {
+  const rotSetting = document.getElementById('rotationSelect').value;
+  if (rotSetting !== 'auto') return parseInt(rotSetting);
+
+  // Auto-detect: eBay labels are typically landscape on the PDF page (wider than tall).
+  // We need them portrait for 4x6 labels (taller than wide).
+  // If content is wider than tall and target is taller than wide, rotate 90° CW.
+  const contentIsLandscape = contentW > contentH;
+  const targetIsPortrait = targetH > targetW;
+
+  if (contentIsLandscape && targetIsPortrait) return 90;
+  if (!contentIsLandscape && !targetIsPortrait) return 90;
+  return 0;
+}
+
+function rotateCanvas(sourceCanvas, degrees) {
+  if (degrees === 0) return sourceCanvas;
+
+  const rad = degrees * Math.PI / 180;
+  const sw = sourceCanvas.width;
+  const sh = sourceCanvas.height;
+
+  // For 90/270, swap dimensions
+  let dw, dh;
+  if (degrees === 90 || degrees === 270) {
+    dw = sh; dh = sw;
+  } else {
+    dw = sw; dh = sh;
+  }
+
+  const rotated = document.createElement('canvas');
+  rotated.width = dw;
+  rotated.height = dh;
+  const rctx = rotated.getContext('2d');
+
+  rctx.translate(dw / 2, dh / 2);
+  rctx.rotate(rad);
+  rctx.drawImage(sourceCanvas, -sw / 2, -sh / 2);
+
+  return rotated;
+}
+
+async function renderConvertedPreview(page){
+  const cc=document.getElementById('previewConverted');
+  const cctx=cc.getContext('2d');
+  const dims=getLabelDims(document.getElementById('labelSize').value);
+
+  // Render PDF page at high res
+  const vp=page.getViewport({scale:3});
+  const tc=document.createElement('canvas');
+  tc.width=vp.width;tc.height=vp.height;
+  const tctx=tc.getContext('2d');
+  await page.render({canvasContext:tctx,viewport:vp}).promise;
+
+  // Crop to content bounds
+  const b=findContentBounds(tc,tctx);
+  const cW=b.right-b.left, cH=b.bottom-b.top;
+  const cropped=document.createElement('canvas');
+  cropped.width=cW; cropped.height=cH;
+  cropped.getContext('2d').drawImage(tc, b.left, b.top, cW, cH, 0, 0, cW, cH);
+
+  // Determine rotation needed
+  const rot = getRotationDegrees(cW, cH, dims.w, dims.h);
+  const rotatedContent = rotateCanvas(cropped, rot);
+
+  // Scale to fit output
+  const oW=400, oH=oW*(dims.h/dims.w);
+  cc.width=oW; cc.height=oH;
+  cctx.fillStyle='white'; cctx.fillRect(0,0,oW,oH);
+
+  const s=Math.min(oW/rotatedContent.width, oH/rotatedContent.height)*0.92;
+  const dW=rotatedContent.width*s, dH=rotatedContent.height*s;
+  cctx.drawImage(rotatedContent, (oW-dW)/2, (oH-dH)/2, dW, dH);
+  document.getElementById('convertedBadge').textContent=`${dims.w} × ${dims.h}"`;
+}
+
+function findContentBounds(canvas,ctx){
+  const w=canvas.width,h=canvas.height;
+  const d=ctx.getImageData(0,0,w,h).data;
+  const t=245;
+  let top=h,bot=0,left=w,right=0;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=(y*w+x)*4;
+    if(d[i]<t||d[i+1]<t||d[i+2]<t){
+      if(y<top)top=y;if(y>bot)bot=y;if(x<left)left=x;if(x>right)right=x;
+    }
+  }
+  const p=10;
+  return{top:Math.max(0,top-p),bottom:Math.min(h,bot+p),left:Math.max(0,left-p),right:Math.min(w,right+p)};
+}
+
+function getLabelDims(s){return{'4x6':{w:4,h:6},'4x5':{w:4,h:5},'4x4':{w:4,h:4}}[s];}
+
+async function convertAll(openInTab=false){
+  if(!files.length)return;
+  const btn=document.getElementById('convertBtn');
+  const tabBtn=document.getElementById('openTabBtn');
+  btn.disabled=true;tabBtn.disabled=true;
+  btn.innerHTML='Converting…';tabBtn.innerHTML='Converting…';
+  const bar=document.getElementById('progressBar');
+  const fill=document.getElementById('progressFill');
+  bar.classList.add('active');
+  const dims=getLabelDims(document.getElementById('labelSize').value);
+  const dpi=parseInt(document.getElementById('dpiSelect').value);
+  const wPt=dims.w*72, hPt=dims.h*72;
+  const rW=dims.w*dpi, rH=dims.h*dpi;
+  const doc=new jsPDF({orientation:'portrait',unit:'pt',format:[wPt,hPt]});
+  let total=files.reduce((s,f)=>s+f.pages,0),done=0,first=true;
+
+  for(const file of files){
+    for(let p=1;p<=file.pages;p++){
+      if(!first)doc.addPage([wPt,hPt],'portrait');
+      first=false;
+      const page=await file.pdf.getPage(p);
+      const sc=Math.max(dpi/72,3);
+      const vp=page.getViewport({scale:sc});
+      const tc=document.createElement('canvas');
+      tc.width=vp.width;tc.height=vp.height;
+      const tctx=tc.getContext('2d');
+      await page.render({canvasContext:tctx,viewport:vp}).promise;
+
+      // Crop to content
+      const b=findContentBounds(tc,tctx);
+      const cW=b.right-b.left, cH=b.bottom-b.top;
+      const cropped=document.createElement('canvas');
+      cropped.width=cW; cropped.height=cH;
+      cropped.getContext('2d').drawImage(tc, b.left, b.top, cW, cH, 0, 0, cW, cH);
+
+      // Rotate
+      const rot = getRotationDegrees(cW, cH, dims.w, dims.h);
+      const rotatedContent = rotateCanvas(cropped, rot);
+
+      // Scale to output resolution
+      const oc=document.createElement('canvas');
+      oc.width=rW; oc.height=rH;
+      const octx=oc.getContext('2d');
+      octx.fillStyle='white'; octx.fillRect(0,0,rW,rH);
+      const s=Math.min(rW/rotatedContent.width, rH/rotatedContent.height)*0.94;
+      const dW=rotatedContent.width*s, dH=rotatedContent.height*s;
+      octx.drawImage(rotatedContent, (rW-dW)/2, (rH-dH)/2, dW, dH);
+
+      doc.addImage(oc.toDataURL('image/png'),'PNG',0,0,wPt,hPt);
+      done++;fill.style.width=((done/total)*100)+'%';
+    }
+  }
+  const ts=new Date().toISOString().slice(0,10);
+  const filename=files.length===1?files[0].name.replace('.pdf','')+'_4x6.pdf':`ebay_labels_4x6_${ts}.pdf`;
+  if(openInTab){
+    const url=doc.output('bloburi');
+    window.open(url,'_blank');
+  } else {
+    doc.save(filename);
+  }
+  btn.disabled=false;tabBtn.disabled=false;
+  btn.innerHTML=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Convert &amp; Download`;
+  tabBtn.innerHTML=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Open in New Tab`;
+  setTimeout(()=>{bar.classList.remove('active');fill.style.width='0%';},2000);
+}
+
+// Update preview when settings change
+document.getElementById('labelSize').addEventListener('change',async()=>{
+  if(files.length){const p=await files[files.length-1].pdf.getPage(1);await renderConvertedPreview(p);}
+});
+document.getElementById('rotationSelect').addEventListener('change',async()=>{
+  if(files.length){const p=await files[files.length-1].pdf.getPage(1);await renderConvertedPreview(p);}
+});
+</script>
+</body>
+</html>
